@@ -1,4 +1,4 @@
-# Hamiltonian-Decomposition
+Hamiltonian-Decomposition
 
 This is the repo for summer project 2023 on Hamiltonian decomposition in quantum computing
 
@@ -6,11 +6,11 @@ Any issue please contact the author
 
 We will use pytket for most part of the project, follow the instructions below for installation and running the code
 
-- [Hamiltonian-Decomposition](#hamiltonian-decomposition)
-  - [Installation](#installation)
-    - [Install pytket](#install-pytket)
-  - [Repo structure](#repo-structure)
-  - [References in the notebook](#references-in-the-notebook)
+
+- [Installation](#installation)
+  - [Install pytket](#install-pytket)
+- [Repo structure](#repo-structure)
+- [References in the notebook](#references-in-the-notebook)
 
 
 ## Installation 
