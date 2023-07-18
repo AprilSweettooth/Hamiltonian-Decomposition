@@ -1,8 +1,7 @@
-from utils.plot import evol_plot, cheat_plot
+from utils.plot import evol_plot, cheat_plot, compare_plot, exp_plot
 
 from pytket.utils import QubitPauliOperator, gen_term_sequence_circuit
-from pytket.pauli import Pauli, QubitPauliString
-from pytket.circuit import Qubit, Circuit, OpType, fresh_symbol
+from pytket.circuit import Circuit, OpType
 from pytket.extensions.qiskit import AerBackend, AerStateBackend
 from pytket.transform import Transform
 from pytket.partition import PauliPartitionStrat, GraphColourMethod
@@ -37,13 +36,20 @@ class AlgorithmHamSimTrotter:
         self._time_step = t_max/n_trotter_steps
         self._time_space = np.linspace(0,t_max,n_trotter_steps+1)
         f = lambda m: m[0] if len(m) == 1 else m[0] + f(m[1:])
+        self.m = measurements
         self._measurements_overall = f(measurements)
         self._measurements = [m.to_sparse_matrix(self._n_qubits) for m in measurements]
         self.sym = symbol
         self.backend = AerBackend()
         self.statebackend = AerStateBackend()
         self.gate_count = []
-        self.exp = []  
+        self.exp = [] 
+        self.infidelity = []
+        op = self._qubit_operator
+        op.subs({self.sym:1})
+        self._trotter_step_m = expm(-1j * op.to_sparse_matrix(self._n_qubits).toarray() * self._time_step ) #exp(-i H tau)
+        self._evolved_measurement = {}
+        self._evolved_measurements = {}
 
     def _measure(self,trotter_evolution,split):
         #< Psi_t | O | Psi_t > loop over O
@@ -54,7 +60,6 @@ class AlgorithmHamSimTrotter:
             return abs(np.vdot(self._initial_state, trotter_evolution))**2
 
     def _trotter_step_cheat(self,split):
-        self._trotter_step_m = expm(-1j * self._qubit_operator.to_sparse_matrix(self._n_qubits).toarray() * self._time_step ) #exp(-i H tau)
         for t in self._time_space:
             if t == 0:
                 trotter_evolution = self._initial_state
@@ -62,13 +67,19 @@ class AlgorithmHamSimTrotter:
                 trotter_evolution = np.matmul(self._trotter_step_m, trotter_evolution)
             self._evolved_measurements[t] = self._measure(trotter_evolution, split)
 
-    def execute(self, cheat=True, split=False, plot=True):
+    def execute(self, labels, cheat=True, split=False, plot=True):
         if cheat:
             self._trotter_step_cheat(split)
             if plot:
-                cheat_plot(self._evolved_measurements)
+                cheat_plot(self._evolved_measurements, labels)
         else:
-            evol_plot(self._time_space, self.exp, self.gate_count)
+            if split:
+                exp_plot(self._evolved_measurements, labels)
+            else:
+                evol_plot(self._time_space, self.exp, self.gate_count, self.infidelity, labels)
+    
+    def compare(self, exps, gates, infidelities, labels):
+        compare_plot(self._time_space, exps, gates, infidelities, labels)
 
     def _trotter_step(self, n, reverse=False):
         ref_cir = Circuit(self._n_qubits)
@@ -81,7 +92,6 @@ class AlgorithmHamSimTrotter:
                 self._rev_qubit_op, ref_cir, PauliPartitionStrat.CommutingSets, GraphColourMethod.Lazy
             )
             while n > 0:
-                print(n)
                 cir.append(ansatz_circuit)
                 cir.append(rev_ansatz_circuit)
                 n -= 1      
@@ -94,35 +104,49 @@ class AlgorithmHamSimTrotter:
                 n -= 1   
         return cir
     
-    def lie_trotter(self):  
+    def lie_trotter(self,return_value=False):  
         for n in range(0, self._n_trotter_step+1):
             c = self._trotter_step(n)
             naive_circuit = c.copy()
             Transform.DecomposeBoxes().apply(naive_circuit)
             self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
             if n==0:
+                state_true = self._initial_state
                 symbol_dict = {self.sym: 0}
             else:
+                state_true = np.matmul(self._trotter_step_m, state_true)
                 symbol_dict = {self.sym: self._time_step/n}
             naive_circuit.symbol_substitution(symbol_dict)
             compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
-            self.exp.append(abs(np.vdot(self._initial_state,self.statebackend.run_circuit(compiled_circuit).get_state()))**2)
+            statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+            self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
+            self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
+            self._evolved_measurement[self._time_space[n]] = self._measurements_overall.state_expectation(statevec)
+            self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m]  
+        if return_value:
+            return self.exp, self.gate_count, self.infidelity, self._evolved_measurements
 
-    def second_order_suzuki_trotter(self):  
+    def second_order_suzuki_trotter(self,return_value=False):  
         for n in range(0, self._n_trotter_step+1):
             c = self._trotter_step(n, True)
             naive_circuit = c.copy()
             Transform.DecomposeBoxes().apply(naive_circuit)
             self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
             if n==0:
+                state_true = self._initial_state
                 symbol_dict = {self.sym: 0}
             else:
+                state_true = np.matmul(self._trotter_step_m, state_true)
                 symbol_dict = {self.sym: self._time_step/(2*n)}
             naive_circuit.symbol_substitution(symbol_dict)
-            print(naive_circuit.get_commands())
             compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
-            self.exp.append(abs(np.vdot(self._initial_state,self.statebackend.run_circuit(compiled_circuit).get_state()))**2)
-            # exp.append(self.backend.get_operator_expectation_value(self.backend.get_compiled_circuit(naive_circuit), self._qubit_operator))
+            statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+            self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
+            self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
+            self._evolved_measurement[self._time_space[n]] = self._measurements_overall.state_expectation(statevec)
+            self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m]  
+        if return_value:
+            return self.exp, self.gate_count, self.infidelity, self._evolved_measurements
 
     def suzuki_trotter_cir_gen(self, n, order, high_coeff=1):
         if order % 2 == 1:
@@ -160,22 +184,27 @@ class AlgorithmHamSimTrotter:
         suzuki_circ.append(sub_2)
         return suzuki_circ
     
-    def suzuki_trotter(self,order):
+    def suzuki_trotter(self,order,return_value=False):
         gate_count = []
         exp = []    
         for n in range(0, self._n_trotter_step+1):
             if n==0:
                 c = self.circuit
+                state_true = self._initial_state
             else:
                 c = self.circuit
+                state_true = np.matmul(self._trotter_step_m, state_true)
                 c_suzuki = self.suzuki_trotter_cir_gen(n,order)
                 while n > 0:
                     c.append(c_suzuki)
                     n -= 1
-            print(c.get_commands())
             naive_circuit = c.copy()
-            gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
+            self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
             compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
+            statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+            self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
             self.exp.append(abs(np.vdot(self._initial_state,self.statebackend.run_circuit(compiled_circuit).get_state()))**2)
-            # exp.append(self.backend.get_operator_expectation_value(self.backend.get_compiled_circuit(naive_circuit), self._qubit_operator))
-        return exp, gate_count
+            self._evolved_measurement[self._time_space[n]] = self._measurements_overall.state_expectation(statevec)
+            self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m]  
+        if return_value:
+            return self.exp, self.gate_count, self.infidelity, self._evolved_measurements
