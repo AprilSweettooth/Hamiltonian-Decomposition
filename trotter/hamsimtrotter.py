@@ -7,6 +7,7 @@ from pytket.transform import Transform
 from pytket.partition import PauliPartitionStrat, GraphColourMethod
 
 import numpy as np
+import math as m
 from scipy.linalg import expm
 
 
@@ -83,7 +84,7 @@ class AlgorithmHamSimTrotter:
 
     def _trotter_step(self, n, reverse=False):
         ref_cir = Circuit(self._n_qubits)
-        cir = self.circuit
+        cir = self.circuit.copy()
         if reverse:
             ansatz_circuit = gen_term_sequence_circuit(
                 self._qubit_operator, ref_cir, PauliPartitionStrat.CommutingSets, GraphColourMethod.Lazy
@@ -139,6 +140,7 @@ class AlgorithmHamSimTrotter:
                 state_true = np.matmul(self._trotter_step_m, state_true)
                 symbol_dict = {self.sym: self._time_step/(2*n)}
             naive_circuit.symbol_substitution(symbol_dict)
+            # print(naive_circuit.get_commands())
             compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
             statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
             self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
@@ -185,19 +187,19 @@ class AlgorithmHamSimTrotter:
         return suzuki_circ
     
     def suzuki_trotter(self,order,return_value=False):
-        gate_count = []
-        exp = []    
         for n in range(0, self._n_trotter_step+1):
             if n==0:
-                c = self.circuit
+                c = self.circuit.copy()
                 state_true = self._initial_state
             else:
-                c = self.circuit
+                c = self.circuit.copy()
                 state_true = np.matmul(self._trotter_step_m, state_true)
                 c_suzuki = self.suzuki_trotter_cir_gen(n,order)
                 while n > 0:
+                    # print(c.get_commands())
                     c.append(c_suzuki)
                     n -= 1
+           
             naive_circuit = c.copy()
             self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
             compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
@@ -208,3 +210,52 @@ class AlgorithmHamSimTrotter:
             self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m]  
         if return_value:
             return self.exp, self.gate_count, self.infidelity, self._evolved_measurements
+        
+
+    def prod(self, q, k):
+        p = 1
+        for j in range(k+1):
+            if j != q:
+                p *= q**2/(q**2-j**2)
+            else:
+                p *= 1
+        return p
+
+    def multi_prod_trotter_cir_gen(self, n, order):
+        if order % 2 == 1:
+            print('Must be even order !')
+            return False
+        k = len(self._qubit_operator.to_list())
+        mulprod_circs = [Circuit(self._n_qubits)]*(k+1)
+        gamma_exp = m.ceil(np.exp((k+1)*(1+np.log(0.3081)/2+np.log(((2*k)**2.5)/8)/(2*k))))
+        Cs = np.zeros((2**self._n_qubits,), dtype='complex128')
+        for q in range(1,k+1):
+            Cs[q-1] = ((q**2/(q**2-gamma_exp**2)) * self.prod(q,k))
+            i = q
+            while i>0:
+                mulprod_circs[q-1].append(self.suzuki_trotter_cir_gen(n, order, 1/q))
+                i -= 1
+        Cs[-1] = self.prod(gamma_exp**2,k)
+        for i in range(k+1):
+            mulprod_circs[-1].append(self.suzuki_trotter_cir_gen(n, order, 1/gamma_exp))
+        return mulprod_circs, Cs
+    
+    def LCU(self,order,return_value=False):  
+        for n in range(0, self._n_trotter_step+1):
+            if n==0:
+                cs = [self.circuit] * (len(self._qubit_operator.to_list())+1) 
+                coeff = np.ones((2**self._n_qubits,), dtype='complex128')
+            else:
+                cs = [self.circuit] * (len(self._qubit_operator.to_list())+1)
+                c_lcu, coeff = self.multi_prod_trotter_cir_gen(n,order)
+                while n > 0:
+                    for c in cs:
+                        c.append(c_lcu[cs.index(c)])
+                    n -= 1
+            statevec = np.zeros((2**self._n_qubits,), dtype='complex128')
+            for i in range((len(self._qubit_operator.to_list())+1)): 
+                naive_circuit = cs[i].copy()
+                compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
+                statevec += coeff[i]*self.statebackend.run_circuit(compiled_circuit).get_state()
+            self.exp.append(abs(np.vdot(self._initial_state,self.statebackend.run_circuit(compiled_circuit).get_state()))**2)
+        return self.exp, self._time_space
