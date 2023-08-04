@@ -21,9 +21,11 @@ class AlgorithmHamSimqDrift:
                  initial_state: Circuit, 
                  qubit_operator: "list[QubitPauliOperator]",
                  coeff: list,
-                 measurements: "list[QubitPauliOperator]",
+                #  measurements: "list[QubitPauliOperator]",
+                 dict_qubit_operator: QubitPauliOperator,
                  t_max: float,
                  reps: int,
+                 symbol: str,
                  *args,
                  **kwargs):
 
@@ -32,19 +34,24 @@ class AlgorithmHamSimqDrift:
         self._n_qubits = initial_state.n_qubits
         self._initial_state = AerStateBackend().run_circuit(initial_state).get_state()
         self._qubit_operator = qubit_operator
+        t=fresh_symbol("t")
+        self.H = dict_qubit_operator
+        self.H.subs({symbol:1})
         self.coeff = coeff
         self.t_max = t_max
         self._rep = reps
         self._time_step = t_max/self._rep
         self._time_space = np.linspace(0,t_max,self._rep+1)
-        self.m = measurements
-        f = lambda m: m[0] if len(m) == 1 else m[0] + f(m[1:])
-        self._measurements_overall = f(measurements)
-        self._measurements = [m.to_sparse_matrix(self._n_qubits) for m in measurements]
+        # self.m = measurements
+        # f = lambda m: m[0] if len(m) == 1 else m[0] + f(m[1:])
+        # self._measurements_overall = f(measurements)
+        # self._measurements = [m.to_sparse_matrix(self._n_qubits) for m in measurements]
         self.backend = AerBackend()
         self.statebackend = AerStateBackend()
         self.gate_count = []
         self.exp = []  
+        self.E = {}
+        self.U_sim = np.zeros((2**self._n_qubits,2**self._n_qubits)) 
 
     def Drift_step(self, t):
         weights = [abs(co) for co in self.coeff]
@@ -89,13 +96,13 @@ class AlgorithmHamSimqDrift:
         return ops
 
     def Drift_exp(self):
-        for n in range(self._rep+1):
+        for n in range(self._rep,self._rep+1):
             if n ==0:
                 circ = self.circuit.copy()
             else:
                 circ = self.circuit.copy() 
                 V, coeff, idx = self.Drift_step(self._time_space[n])
-                print(V, coeff, idx)
+                # print(V, coeff, idx)
                 for j in range(n):
                     V_j = self.Convert_String_to_Op(V[j])
                     pbox = PauliExpBox(V_j, coeff[idx[j]])
@@ -104,17 +111,23 @@ class AlgorithmHamSimqDrift:
             naive_circuit = circ.copy()
             Transform.DecomposeBoxes().apply(naive_circuit)
             # print(tk_to_qiskit(naive_circuit))
-            self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
-            compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
-            self.exp.append(abs(np.vdot(self._initial_state,self.statebackend.run_circuit(compiled_circuit).get_state()))**2)
+            # self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
+            self.U_sim = naive_circuit.get_unitary()
+            # compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
+            # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+            # self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
+            # self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)]) 
 
 
-    def execute(self, real, color):
+    def execute(self, real=None, color='purple', plot=False):
         # trotter_cheat = AlgorithmHamSimTrotter(self.c_copy,self.real_op,self.m,self.t_max,self._rep,fresh_symbol("t"))
         # trotter_cheat._trotter_step_cheat(exps='proj')
         # plt.plot(self._time_space, list(trotter_cheat._real_measurement.values()), c='blue')
-        plt.plot(self._time_space, real)
-        plt.scatter(self._time_space, self.exp, c=color)
-        plt.xlabel(r'Time')
-        plt.ylabel('proj')
+        if plot:
+            plt.plot(self._time_space, real)
+            plt.plot(self._time_space, list(self.E.values()), c=color)
+            plt.xlabel(r'Time')
+            plt.ylabel('proj')
+        else:
+            return self.U_sim
         # evol_plot(self._time_space, self.exp, self.gate_count)

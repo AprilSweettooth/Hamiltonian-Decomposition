@@ -66,7 +66,7 @@ class AlgorithmHamSimTrotter:
         self._real_measurement = {}
         self._evolved_measurement = {}
         self._evolved_measurements = {}
-        self.U_sim = np.zeros((2**self._n_qubits,2**self._n_qubits)) 
+        self.U_sim = np.zeros((2**self._n_qubits,2**self._n_qubits), dtype='complex128') 
         self.U_sims = []       
         self.E = {}
 
@@ -95,7 +95,7 @@ class AlgorithmHamSimTrotter:
             self._real_measurement[t] = self._measure(trotter_evolution, exps)
 
     def execute(self, labels=['LieTrotter','LieTrotter','LieTrotter'], exps='proj', color='blue', cheat=True, plot=True):
-        self._trotter_step_cheat(exps)
+        # self._trotter_step_cheat(exps)
         if cheat:
             cheat_plot(self._real_measurement, labels, exps, color)
         else:
@@ -111,6 +111,7 @@ class AlgorithmHamSimTrotter:
             else:
                 # return self.U_sims, [matrix_power(self._trotter_step_m, s)@self._initial_unitary for s in range(self._n_trotter_step+1) ]
                 return self.U_sim, matrix_power(self._trotter_step_m,(self._n_trotter_step+1))@self._initial_unitary
+                # return  matrix_power(self._trotter_step_m,(self._n_trotter_step+1))@self._initial_unitary
 
     def compare(self, exps, gates, infidelities, labels, colors):
         self._trotter_step_cheat(exps='proj')
@@ -138,7 +139,8 @@ class AlgorithmHamSimTrotter:
             # a = Circuit(4).add_pauliexpbox(pbox, [0, 1, 2, 3])
       
             for i in range(n):
-    
+                if i%5000==0:
+                    print('step:',i)
                 cir.append(ansatz_circuit)
                 # n -= 1   
           
@@ -146,7 +148,7 @@ class AlgorithmHamSimTrotter:
     
     def lie_trotter(self,return_value=False):  
         # change every 0 to trotter step for experimenting
-        for n in range(0, self._n_trotter_step+1):
+        for n in range(self._n_trotter_step, self._n_trotter_step+1):
      
             c = self._trotter_step(n)
          
@@ -165,19 +167,19 @@ class AlgorithmHamSimTrotter:
             # print(tk_to_qiskit(naive_circuit))
             # print(tk_to_qiskit(naive_circuit))
             # print(naive_circuit.get_unitary())
-            compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
+            # compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
             
             # print(compiled_circuit.get_commands())
-            # self.U_sim = naive_circuit.get_unitary()
+            self.U_sim = naive_circuit.get_unitary()
             # self.U_sims.append(self.U_sim)
             # print(self.U_sim)
-            statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+            # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
             # print(statevec)
             # self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
             # self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
             # self._evolved_measurement[self._time_space[n]] = self._measurements_overall.state_expectation(statevec)
             # self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m]  
-            self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)])
+            # self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)])
         if return_value:
             return self.exp, self.gate_count, self.infidelity, self._evolved_measurements
 
@@ -196,14 +198,14 @@ class AlgorithmHamSimTrotter:
             naive_circuit.symbol_substitution(symbol_dict)
             # print(tk_to_qiskit(naive_circuit))
             # print(naive_circuit.get_commands())
-            compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
-            # self.U_sim = naive_circuit.get_unitary()
-            statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+            # compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
+            self.U_sim = naive_circuit.get_unitary()
+            # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
             # self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
             # self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
             # self._evolved_measurement[self._time_space[n]] = self._measurements_overall.state_expectation(statevec)
             # self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m] 
-            self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)]) 
+            # self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)]) 
         if return_value:
             return self.exp, self.gate_count, self.infidelity, self._evolved_measurements
 
@@ -293,16 +295,17 @@ class AlgorithmHamSimTrotter:
             print('Must be even order !')
             return False
         k = len(self._qubit_operator.to_list())
-        mulprod_circs = [Circuit(self._n_qubits)]*(k)
-        gamma_exp = m.ceil(np.exp((k)*(1+np.log(0.3081)/2+np.log(((2*(k-1))**2.5)/8)/(2*(k-1)))))
-        Cs = np.zeros((2**self._n_qubits,), dtype='complex128')
+        mulprod_circs = [Circuit(self._n_qubits) for i in range(k)]
+        # gamma_exp = m.ceil(np.exp((k)*(1+np.log(0.3081)/2+np.log(((2*(k-1))**2.5)/8)/(2*(k-1)))))
+        Cs = np.zeros((k,), dtype='complex128')
         for q in range(0,k):
             # Cs[q] = (((q+1)**2/((q+1)**2-gamma_exp**2)) * self.prod((q+1),k-1))
             Cs[q] = self.prod((q+1),k)
-            i = q+1
-            while i>0:
+            for _ in range(q+1):
                 mulprod_circs[q].append(self.suzuki_trotter_cir_gen(order, 1/(q+1)))
-                i -= 1
+            # mulprod_circs[q].add_barrier([0, 1, 2, 3])
+            # print(tk_to_qiskit(mulprod_circs[1]))
+        # print(Cs)
         # Cs[-1] = self.prod(gamma_exp**2,k)
         # for i in range(k):
         #     mulprod_circs[-1].append(self.suzuki_trotter_cir_gen(order, 1/gamma_exp))
@@ -311,11 +314,11 @@ class AlgorithmHamSimTrotter:
     def LCU(self,order):  
         for n in range(self._n_trotter_step, self._n_trotter_step+1):
             if n==0:
-                cs = [self.circuit.copy()] * (len(self._qubit_operator.to_list()))
+                cs = [self.circuit.copy() for i in range(len(self._qubit_operator.to_list()))]
                 coeff = np.ones((2**self._n_qubits,), dtype='complex128')
                 # state_true = self._initial_state
             else:
-                cs = [self.circuit.copy()] * (len(self._qubit_operator.to_list()))
+                cs = [self.circuit.copy() for i in range(len(self._qubit_operator.to_list()))]
                 c_lcu, coeff = self.multi_prod_trotter_cir_gen(order)
                 # state_true = np.matmul(self._trotter_step_m, state_true)
                 while n > 0:
@@ -327,7 +330,7 @@ class AlgorithmHamSimTrotter:
             for i in range((len(self._qubit_operator.to_list()))): 
                 naive_circuit = cs[i].copy()
                 # compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
-                self.U_sim += coeff[i]*naive_circuit.get_unitary()
+                self.U_sim += coeff[i]*naive_circuit.get_unitary().astype('complex128')
             #     statevec += coeff[i]*self.statebackend.run_circuit(compiled_circuit).get_state()
             # self.infidelity.append(1 - np.abs(np.conj(state_true).dot(statevec))**2)
             # self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
@@ -335,8 +338,8 @@ class AlgorithmHamSimTrotter:
             # self._evolved_measurements[self._time_space[n]] = [m.state_expectation(statevec) for m in self.m]   
 
     def random_perm(self,order):
-        perms = list(itertools.permutations(self._qubit_operator.to_list()))
-        L = len(self._qubit_operator.to_list())
+        # perms = list(itertools.permutations(self._qubit_operator.to_list()))
+        # L = len(self._qubit_operator.to_list())
         for n in range(self._n_trotter_step, self._n_trotter_step+1):
             # statevec = np.zeros((2**self._n_qubits,), dtype='complex128')
             # if n==0:
@@ -351,8 +354,10 @@ class AlgorithmHamSimTrotter:
 
             # for l in range(L):
             # m = n
-            op = QubitPauliOperator.from_list(perms[np.random.randint(L, size=1)])
+            # op = QubitPauliOperator.from_list(perms[np.random.randint(L, size=1)])
+            op = QubitPauliOperator.from_list(list(np.random.permutation(self._qubit_operator.to_list())))
             rev_op = QubitPauliOperator.from_list(op.to_list()[::-1])
+            # print(op, rev_op)
             c = self.circuit.copy()
             c_perm = self.suzuki_trotter_cir_gen(order, perm=True, perm_op=op, rev_perm_op=rev_op)
             while n > 0:
