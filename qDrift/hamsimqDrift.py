@@ -1,4 +1,5 @@
 from utils.plot import evol_plot
+from utils.func import count_parity
 from trotter.hamsimtrotter import AlgorithmHamSimTrotter
 
 from pytket.utils import QubitPauliOperator
@@ -41,6 +42,7 @@ class AlgorithmHamSimqDrift:
         self.backend = AerBackend()
         self.statebackend = AerStateBackend()
         self.U_sims = []
+        self.shots = []
         # self.U_sim = np.zeros((2**self._n_qubits,2**self._n_qubits)) 
 
     def Drift_step(self):
@@ -92,12 +94,14 @@ class AlgorithmHamSimqDrift:
         return ops
 
     def Drift_exp(self):
+        V, coeff, idx = self.Drift_step()
+        print(V, coeff, idx)
         for n in range(0,self._rep+1):
             if n ==0:
                 circ = self.circuit.copy()
             else:
                 circ = self.circuit.copy() 
-                V, coeff, idx = self.Drift_step()
+                
                 # print(V, coeff, idx)
                 for j in range(n):
                     for paulis in V[j]:
@@ -109,12 +113,18 @@ class AlgorithmHamSimqDrift:
             Transform.DecomposeBoxes().apply(naive_circuit)
             # print(tk_to_qiskit(naive_circuit))
             # self.gate_count.append(naive_circuit.n_gates_of_type(OpType.CX))
-            self.U_sims.append(naive_circuit.get_unitary())
+            # self.U_sims.append(naive_circuit.get_unitary())
             # compiled_circuit = self.statebackend.get_compiled_circuit(naive_circuit)
+            compiled_circuit = self.backend.get_compiled_circuit(naive_circuit)
+            handle = self.backend.process_circuit(compiled_circuit, n_shots=100)
+            counts = self.backend.get_result(handle).get_counts()
+            print(counts)
+            self.shots.append(counts)
             # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
             # self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
             # self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)]) 
-        return self.U_sims
+        # return self.U_sims
+        return count_parity(self.shots)
 
 
     def execute(self, real=None, color='purple', plot=False):

@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+from scipy import linalg
+import numpy as np
 
 def cheat_plot(measurements, labels, ylabel, color):
     times = list(measurements.keys())
@@ -57,3 +59,26 @@ def exp_plot(real_measu, measurements, labels, exp, color):
     plt.ylabel(exp)
     plt.legend()
     plt.show()
+
+def particle_number(sample, shots_ratio, label, color):
+    plt.plot(sample,shots_ratio,label=label, c=color)
+    plt.legend()
+    plt.title('Particle number evolution')
+    plt.xlabel('Sample number')
+    plt.ylabel('scaled particle number')
+
+def compare_particle_number(sample, shots_ratio):
+    plt.plot(sample,shots_ratio[0],label='term grouped')
+    plt.plot(sample,shots_ratio[1],label='original qdrift')
+    plt.title('Particle number evolution')
+    plt.xlabel('Sample number')
+    plt.ylabel('scaled particle number')
+    plt.legend()
+
+def compare_spectral_error(sample_number, U, Us, Us_orig):
+    plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us,U)], label='term grouping')
+    plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us_orig,U)], label='original drift')
+    plt.title('spectral error over sample number')
+    plt.xlabel('Sample number')
+    plt.ylabel('spectral error') 
+    plt.legend()
