@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from scipy import linalg
 import numpy as np
+from matplotlib import colors
+from matplotlib.ticker import PercentFormatter
 
 def cheat_plot(measurements, labels, ylabel, color):
     times = list(measurements.keys())
@@ -82,3 +84,29 @@ def compare_spectral_error(sample_number, U, Us, Us_orig):
     plt.xlabel('Sample number')
     plt.ylabel('spectral error') 
     plt.legend()
+
+def hist(dicts):
+    # Creating histogram
+    fig, axs = plt.subplots(1, 2,
+                            figsize =(2*6, 7),
+                            tight_layout = True)
+    # mask11 = list(dicts[0].values()) < max(list(dicts[0].values())) * 0.25
+    # mask12 = max(list(dicts[0].values())) * 0.5 <= list(dicts[0].values()) < max(list(dicts[0].values())) * 0.5
+    # mask13 = max(list(dicts[0].values())) * 0.5 <= list(dicts[0].values())
+    # mask21 = list(dicts[1].values()) < max(list(dicts[1].values())) * 0.25
+    # mask22 = max(list(dicts[1].values())) * 0.5 <= list(dicts[1].values()) < max(list(dicts[1].values())) * 0.5
+    # mask23 = max(list(dicts[1].values())) * 0.5 <= list(dicts[1].values() ) 
+    # fracs = ((N**(1 / 5)) / N.max())
+    # norm = colors.Normalize(fracs.min(), fracs.max())
+    
+    # for thisfrac, thispatch in zip(fracs, patches):
+    #     color = plt.cm.viridis(norm(thisfrac))
+    #     thispatch.set_facecolor(color)
+    # ignore plotting all sting for now because Hamiltonian is huge
+    # also no color distinction as the total sample is small
+    axs[0].bar(list(dicts[0].keys()), list(dicts[0].values()), color='g', label='term grouped')
+    axs[1].bar(list(dicts[1].keys()), list(dicts[1].values()), color='r', label='original qdrift')
+    axs[0].legend()
+    axs[1].legend()
+
+
