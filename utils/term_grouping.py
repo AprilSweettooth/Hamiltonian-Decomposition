@@ -4,7 +4,7 @@ from copy import deepcopy
 from utils.min_clique import BronKerbosch
 
 # Get ops in cirq format
-def get_openfermion_str(pauli_term, reverse=True):
+def get_openfermion_str(pauli_term, reverse=False, n=10):
     
     cirq_term = []
     
@@ -12,7 +12,17 @@ def get_openfermion_str(pauli_term, reverse=True):
         if op == 'I':
             continue
         
-        cirq_term.append(op + str(9-i if not reverse else i))
+        cirq_term.append(op + str(n-1-i if not reverse else i))
+    new_pauli_term = ' '.join(cirq_term)
+    
+    return new_pauli_term
+
+def get_openfermion_allstr(pauli_term, reverse=True, n=10):
+    
+    cirq_term = []
+    
+    for i, op in enumerate(list(pauli_term)):
+        cirq_term.append(op + str(n-1-i if not reverse else i))
     new_pauli_term = ' '.join(cirq_term)
     
     return new_pauli_term
@@ -39,6 +49,14 @@ def ops_commute(op1, op2):
         sign *= -1
     
     return True if sign==1 else False
+
+def check_commutivity(group):
+    for i in range(len(group)):
+        for j in range(i+1,len(group)):
+            s = ops_commute(group[i],group[j])
+            if not s:
+                return False
+    return True
 
 def ops_do_not_overlap(op_1, op_2):
     qbs = []

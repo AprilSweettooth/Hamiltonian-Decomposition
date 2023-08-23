@@ -1,7 +1,7 @@
 from openfermion import QubitOperator as q
 from openfermion import get_sparse_operator
 from utils.term_grouping import get_openfermion_str
-
+import numpy as np
 def Heisenberg(n,J,periodic=True):
     identity = ['I']*n
     ops = []
@@ -46,7 +46,7 @@ def Heisenberg(n,J,periodic=True):
 
     cirq_ops = []
     for op in ops:
-        cirq_ops.append(get_openfermion_str(op))
+        cirq_ops.append(get_openfermion_str(op,n=n))
 
     for co, op in zip(coeff, cirq_ops):
         Hq += q(op, co[0])

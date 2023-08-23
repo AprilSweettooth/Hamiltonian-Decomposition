@@ -8,6 +8,7 @@ from pytket.transform import Transform
 from pytket.partition import PauliPartitionStrat, GraphColourMethod
 from pytket.circuit.display import render_circuit_jupyter
 from pytket.extensions.qiskit import tk_to_qiskit
+from pytket.pauli import Pauli
 
 from tqdm import tqdm
 import numpy as np
@@ -109,8 +110,8 @@ class AlgorithmHamSimTrotter:
                 elif exps=='proj':
                     evol_plot(self._real_measurement, self._time_space, self.exp, self.gate_count, self.infidelity, labels, color)
             else:
-                # return self.U_sims, [matrix_power(self._trotter_step_m, s)@self._initial_unitary for s in range(self._n_trotter_step+1) ]
-                return self.U_sim, matrix_power(self._trotter_step_m,(self._n_trotter_step+1))@self._initial_unitary
+                return self.U_sims, [matrix_power(self._trotter_step_m, s)@self._initial_unitary for s in range(self._n_trotter_step+1) ]
+                # return self.U_sim, matrix_power(self._trotter_step_m,(self._n_trotter_step+1))@self._initial_unitary
                 # return  matrix_power(self._trotter_step_m,(self._n_trotter_step+1))@self._initial_unitary
 
     def compare(self, exps, gates, infidelities, labels, colors):
@@ -120,6 +121,8 @@ class AlgorithmHamSimTrotter:
     def _trotter_step(self, n, reverse=False):
         ref_cir = Circuit(self._n_qubits)
         cir = self.circuit.copy()
+        # pbox = PauliExpBox([Pauli.Z]*self._n_qubits, 0.02*n) 
+        # cir.add_pauliexpbox(pbox, np.arange(self._n_qubits))
         if reverse:
             ansatz_circuit = gen_term_sequence_circuit(
                 self._qubit_operator, ref_cir, PauliPartitionStrat.CommutingSets, GraphColourMethod.Lazy
@@ -137,18 +140,39 @@ class AlgorithmHamSimTrotter:
             )
             # pbox = PauliExpBox([Pauli.I, Pauli.X, Pauli.Y, Pauli.Z], 0.75)
             # a = Circuit(4).add_pauliexpbox(pbox, [0, 1, 2, 3])
-      
+            # cir.append(self.construct_protection(n))
+            for i in range(self._n_qubits):
+                cir.Rz(0.25,i)
             for i in range(n):
-                if i%5000==0:
-                    print('step:',i)
+            #     if i%5000==0:
+            #         print('step:',i)
                 cir.append(ansatz_circuit)
-                # n -= 1   
+            for i in range(self._n_qubits):
+                cir.Rz(-0.25,i)
+                # n -= 1
+            # cir.append(self.construct_protection(n).dagger())
+            # pbox = PauliExpBox([Pauli.Z]*self._n_qubits, -0.02*n) 
+            # cir.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
           
         return cir
     
+    def construct_protection(self,n):
+        protection = Circuit(self._n_qubits) 
+        c = Circuit(self._n_qubits)
+        for i in range(self._n_qubits):
+            c.Ry(0.25,i)
+        Cir = c.copy()
+        c_dagger = Cir.dagger()
+        protection.append(c)
+        pbox = PauliExpBox([Pauli.Z]*self._n_qubits, 0.02*n)
+        protection.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+        protection.append(c_dagger)
+
+        return protection
+
     def lie_trotter(self,return_value=False):  
         # change every 0 to trotter step for experimenting
-        for n in range(self._n_trotter_step, self._n_trotter_step+1):
+        for n in range(0, self._n_trotter_step+1):
      
             c = self._trotter_step(n)
          
@@ -171,7 +195,7 @@ class AlgorithmHamSimTrotter:
             
             # print(compiled_circuit.get_commands())
             self.U_sim = naive_circuit.get_unitary()
-            # self.U_sims.append(self.U_sim)
+            self.U_sims.append(self.U_sim)
             # print(self.U_sim)
             # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
             # print(statevec)

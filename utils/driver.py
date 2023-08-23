@@ -91,7 +91,7 @@ class PySCFDriver_custom(Driver):
         self.mol.build(
             atom=pyscf_atom,
             basis=basis,
-            spin=multiplicity-1,
+            spin=multiplicity,
             charge=charge,
             unit=unit
         )

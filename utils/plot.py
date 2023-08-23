@@ -77,11 +77,34 @@ def compare_particle_number(sample, shots_ratio):
     plt.ylabel('scaled particle number')
     plt.legend()
 
-def compare_spectral_error(sample_number, U, Us, Us_orig):
-    plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us,U)], label='term grouping')
-    plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us_orig,U)], label='original drift')
-    plt.title('spectral error over sample number')
-    plt.xlabel('Sample number')
+def take_id(U,sample):
+    U_new = []
+    for i in range(len(sample)):
+        U_new.append(U[sample[i]])
+    return U_new
+
+# def compare_spectral_error(sample_number, U, Us, Us_orig, labels, grouped=None, Us_prot=None, sample=None):
+#     if isinstance(grouped,list):
+#         plt.plot(sample_number[0::grouped[0]],[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us,U[0::grouped[0]])], label=labels[0])
+#         plt.plot(sample_number[0::grouped[1]],[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us_orig,U[0::grouped[1]])], label=labels[1])
+#     elif grouped != None: 
+#         plt.plot([0]+[len(s) for s in sample],[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us,take_idx(U,sample))], label=labels[0])
+#         plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us_orig,U)], label=labels[1])
+#         if Us_prot != None:
+#             plt.plot([0]+[len(s) for s in sample],[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us_prot,take_idx(U,sample))], label=labels[2]) 
+#     else:
+#         plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us,U)], label=labels[0])
+#         plt.plot(sample_number,[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(Us_orig,U)], label=labels[1])        
+#     plt.title('spectral error over sample number')
+#     plt.xlabel('Sample steps')
+#     plt.ylabel('spectral error') 
+#     plt.legend()
+
+def compare_spectral_error(depth,U,Uexc,labels):
+    for i in range(len(depth)):
+        plt.plot(depth[i],[np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(U[i],take_id(Uexc,depth[i]))],label=labels[i])
+    plt.title('spectral error over circuit depth')
+    plt.xlabel('number of pauli gadgets')
     plt.ylabel('spectral error') 
     plt.legend()
 

@@ -16,12 +16,12 @@ def factorial(n):
 # Calculate the L1 spectral distance between the two unitary matrices which is the operator norm, largest eigen (singular) value
 def calculate_error(U1, U2):
     # U = np.zeros((U1[0].shape), dtype='complex128')
-    M = len(U1)
-    U_sim = sum(U1)
+    # M = len(U1)
+    # U_sim = sum(U1)
     # print(U_sim/M)
     # print(U2)
     # print(U_sim/M - U2) 
-    return np.abs(linalg.eig(U_sim/M - U2)[0]).max()
+    return np.abs(linalg.eig(U1 - U2)[0]).max()
 
 def count_parity(dict):
     parity = [i for i in list(list(dict[0].keys())[0])].count(1)
@@ -59,6 +59,22 @@ def strings_from_openfermion(openf_op):
         string = qps_from_openfermion(term)
         tk_op[string] = coeff
     return tk_op
+
+def replace_Pauli_strings(n,list_paulis):
+    identity = 'I'*n
+    for p in list_paulis:
+        pos = list(p)[0]
+        pauli = list(p)[1]
+        identity = identity[:pos] + pauli + identity[pos + 1:] 
+    return identity
+
+def convert_op_to_input(ops,n):
+    tk_op = []
+    tk_coeff = []
+    for term, coeff in ops.terms.items():
+        tk_op.append(replace_Pauli_strings(n,list(term)))
+        tk_coeff.append(coeff)
+    return tk_op[1:],tk_coeff[1:]
 
 # !/usr/bin/env python3
 # Copyright (c) 2022 Institute for Quantum Computing, Baidu Inc. All Rights Reserved.
