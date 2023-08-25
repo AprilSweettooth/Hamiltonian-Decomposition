@@ -15,7 +15,7 @@ import numpy
 from openfermion.ops.operators import QubitOperator
 from openfermion.utils.operator_utils import count_qubits
 
-def JW_transformation(iop):
+def JW_transformation(iop, cancel=True):
     """Output InteractionOperator as QubitOperator class under JW transform.
 
     One could accomplish this very easily by first mapping to fermions and
@@ -29,6 +29,7 @@ def JW_transformation(iop):
     # Initialize qubit operator as constant.
     number, coulomb, no_excitation, hopping, double_excitation = QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant) 
     # qubit_operator = QubitOperator((), iop.constant)
+    double_excitations = []
     n_qubits=count_qubits(iop)
     # Transform diagonal one-body terms
     for p in range(n_qubits):
@@ -71,10 +72,19 @@ def JW_transformation(iop):
                                                (q, 0)].conjugate())
         if len(set([p, q, r, s])) == 3:
             no_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
-        else:
-            double_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
-
-    return number, coulomb, hopping, no_excitation, double_excitation
+        elif len(set([p,q,r,s])) == 4:
+            # print(p,q,r,s)
+            # print(jordan_wigner_two_body(p, q, r, s, coefficient))
+            if cancel:
+                double_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
+            else:
+                scatter = jordan_wigner_two_body(p, q, r, s, coefficient)
+                if list(scatter):
+                    double_excitations.append(scatter)
+    if cancel:
+        return number, coulomb, hopping, no_excitation, double_excitation
+    else:
+        return number, coulomb, hopping, no_excitation, double_excitations
 
 
 def jordan_wigner_one_body(p, q, coefficient=1.):
@@ -136,20 +146,22 @@ def jordan_wigner_two_body(p, q, r, s, coefficient=1.):
                     coeff *= -1
             if not coeff:
                 continue
-
+            
             # Sort operators.
             [(a, operator_a), (b, operator_b), (c, operator_c),
              (d, operator_d)] = sorted(zip([p, q, r, s], ops))
-
+            # print((a, operator_a))
             # Compute operator strings.
             operators = ((a, operator_a),)
             operators += tuple((z, 'Z') for z in range(a + 1, b))
+            
             operators += ((b, operator_b),)
             operators += ((c, operator_c),)
             operators += tuple((z, 'Z') for z in range(c + 1, d))
             operators += ((d, operator_d),)
-
+            # print(operators)
             # Add term.
+            # print(coeff)
             qubit_operator  += QubitOperator(operators, coeff)
 
     # Handle case of three unique indices.

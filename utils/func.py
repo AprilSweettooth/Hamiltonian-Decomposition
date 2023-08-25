@@ -76,6 +76,14 @@ def convert_op_to_input(ops,n):
         tk_coeff.append(coeff)
     return tk_op[1:],tk_coeff[1:]
 
+def convert_twobody_op_to_input(ops,n):
+    tk_op = []
+    tk_coeff = []
+    for term, coeff in ops.terms.items():
+        tk_op.append(replace_Pauli_strings(n,list(term)))
+        tk_coeff.append(coeff)
+    return tk_op,tk_coeff
+
 # !/usr/bin/env python3
 # Copyright (c) 2022 Institute for Quantum Computing, Baidu Inc. All Rights Reserved.
 #

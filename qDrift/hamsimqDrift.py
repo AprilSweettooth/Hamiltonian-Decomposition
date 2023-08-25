@@ -228,6 +228,10 @@ class AlgorithmHamSimqDrift:
             return self.E, self.depth          
 
     def Drift_exp(self, sampled=None, protected=False, spectral=True, abs_coeff=False, trotter=False, depth=1000, measurement='H'):
+        if self.M != 1:
+            self.depth = [[],[],[]]
+        else:
+            self.depth = [[]]
         for m in range(self.M):
             if sampled != None:
                 Vo, coeffo, idxo = sampled[0], sampled[1], sampled[2]
@@ -262,7 +266,7 @@ class AlgorithmHamSimqDrift:
             for n in range(0,min(count, self._rep+1)):
                 if n ==0:
                     circ = self.circuit.copy()
-                    self.depth.append(0)
+                    self.depth[m].append(0)
                 else:
                     if n == 1:
                         circ = self.circuit.copy() 
@@ -295,7 +299,7 @@ class AlgorithmHamSimqDrift:
                                 p = self.Convert_String_to_Op(V_new[i])
                                 pbox = PauliExpBox(p, coeff[(n-1)*self.N+j]/2)
                                 circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
-                            self.depth.append(self.depth[-1]+len(V_new)) 
+                            self.depth[m].append(self.depth[m][-1]+len(V_new)) 
                         else:
                             # print(n)
                             # print(n,V[(n-1)*self.N+j])
@@ -303,7 +307,7 @@ class AlgorithmHamSimqDrift:
                                 p = self.Convert_String_to_Op(paulis)
                                 pbox = PauliExpBox(p, coeff[(n-1)*self.N+j])
                                 circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
-                            self.depth.append(self.depth[-1]+len(V[(n-1)*self.N+j])) 
+                            self.depth[m].append(self.depth[m][-1]+len(V[(n-1)*self.N+j])) 
 
                     if protected:
                         circ.append(self.construct_number_protection(n,True))

@@ -154,7 +154,14 @@ class PySCFDriver_custom(Driver):
 
         with self.mol.with_common_orig((0.0, 0.0, 0.0)):
             ao_integral = self.mol.intor(integral_type)
-        return np.einsum("...ij,ik,jl->...kl", ao_integral, mo_coeff, mo_coeff)
+        # print(mo_coeff)
+        hpq = np.einsum("...ij,ik,jl->...kl", ao_integral, mo_coeff, mo_coeff)
+        # print(hpq)
+        for i in range(hpq.shape[0]):
+            for j in range(hpq.shape[1]):
+                if abs(hpq[i][j]) < 1e-15:
+                    hpq[i][j] = 0
+        return hpq
 
     def get_twobody_tensor(self) -> np.ndarray:
         r"""
@@ -170,4 +177,11 @@ class PySCFDriver_custom(Driver):
 
         eri = ao2mo.kernel(self.mol, mo_coeff)
         eri = ao2mo.restore(1, eri, mo_coeff.shape[1])
-        return np.transpose(eri, (0, 2, 3, 1))
+        vpqrs = np.transpose(eri, (0, 2, 3, 1))
+        for i in range(vpqrs.shape[0]):
+            for j in range(vpqrs.shape[1]):
+                for k in range(vpqrs.shape[2]):
+                    for l in range(vpqrs.shape[3]):
+                        if abs(vpqrs[i][j][k][l]) < 1e-15:
+                            vpqrs[i][j][k][l] = 0
+        return vpqrs
