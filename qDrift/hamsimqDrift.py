@@ -2,6 +2,7 @@ from utils.plot import evol_plot
 from utils.func import count_parity
 from trotter.hamsimtrotter import AlgorithmHamSimTrotter
 from utils.term_grouping import check_commutivity
+from utils.evol_real import get_Hmatrix, pauli_string_to_matrix
 
 from pytket.pauli import Pauli
 from pytket.circuit import Circuit, PauliExpBox
@@ -12,6 +13,7 @@ from pytket.extensions.qiskit import tk_to_qiskit
 import numpy as np
 import math as m
 import matplotlib.pyplot as plt
+import functools as ft
 
 class AlgorithmHamSimqDrift:
     """ The QDrift Trotterization method, which selects each each term in the
@@ -25,8 +27,8 @@ class AlgorithmHamSimqDrift:
                  t_max: float,
                  reps: int,
                  seg: int,
-                 *args,
-                 **kwargs):
+                 M=1,
+                 H_matrix=None):
 
         self.circuit = initial_state
     
@@ -43,11 +45,17 @@ class AlgorithmHamSimqDrift:
 
         self.backend = AerBackend()
         self.statebackend = AerStateBackend()
-        self.U_sims = []
+        self.U_sims_trotter = []
+        self.U_sims = [[],[],[]]
         self.shots = []
         self.terms = 0
         self.depth = []
         self.p = None
+        self.Z = sum([ft.reduce(np.kron,[np.array([[1, 0], [0, 1]])]*self._n_qubits) for _ in range(self._n_qubits)]) - sum([pauli_string_to_matrix(self.replacer('I'*self._n_qubits, idx, 'Z')) for idx in range(self._n_qubits)])
+        # self.Z = ft.reduce(np.kron,[np.array([[1, 0], [0, -1]])]*self._n_qubits)
+        self.H = H_matrix
+        self.E = []
+        self.M = M
         # self.U_sim = np.zeros((2**self._n_qubits,2**self._n_qubits)) 
 
     def sampling(self,idx, prob):
@@ -164,7 +172,7 @@ class AlgorithmHamSimqDrift:
         else:
             return circ
         
-    def trotter(self, order=1, spectral=True, protected=True):
+    def trotter(self, order=1, spectral=True, protected=False, measurement='H'):
         time_step = self._rep
         for n in range(time_step+1):
             if n==0:
@@ -180,7 +188,7 @@ class AlgorithmHamSimqDrift:
                         circ.append(self.construct_number_protection(n))
                     for i in range(len(ops)):
                         p = self.Convert_String_to_Op(ops[i])
-                        pbox = PauliExpBox(p, co[i]/(time_step*np.pi))
+                        pbox = PauliExpBox(p, self.t_max*co[i]/(time_step*np.pi))
                         circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))  
                     self.depth.append(self.depth[-1]+len(ops))  
                 else:
@@ -189,7 +197,7 @@ class AlgorithmHamSimqDrift:
                         circ.append(self.construct_number_protection(n))
                     for i in range(len(ops)):
                         p = self.Convert_String_to_Op(ops[i])
-                        pbox = PauliExpBox(p,self.coeff[i]/(time_step*np.pi/2))
+                        pbox = PauliExpBox(p,self.t_max*self.coeff[i]/(time_step*np.pi/2))
                         circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
                     self.depth.append(self.depth[-1]+len(ops))  
 
@@ -200,32 +208,38 @@ class AlgorithmHamSimqDrift:
             
             # print(tk_to_qiskit(naive_circuit))
             if spectral:
-                self.U_sims.append(naive_circuit.get_unitary())
+                self.U_sims_trotter.append(naive_circuit.get_unitary())
                 
             else:
-                naive_circuit.measure_all()
-                compiled_circuit = self.backend.get_compiled_circuit(naive_circuit)
-                handle = self.backend.process_circuit(compiled_circuit, n_shots=100)
-                counts = self.backend.get_result(handle).get_counts()
-                self.shots.append(counts)
+                # naive_circuit.measure_all()
+                # compiled_circuit = self.backend.get_compiled_circuit(naive_circuit)
+                # handle = self.backend.process_circuit(compiled_circuit, n_shots=100)
+                # counts = self.backend.get_result(handle).get_counts()
+                # self.shots.append(counts)
+                statevec = naive_circuit.get_statevector()
+                if measurement=='H':
+                    self.E.append((statevec.conj().T@self.H)@statevec)
+                elif measurement=='Z':
+                    self.E.append((statevec.conj().T@self.Z)@statevec) 
 
         if spectral:
-            return self.U_sims, self.depth
+            return self.U_sims_trotter, self.depth
         else:
-            return count_parity(self.shots)          
+            return self.E, self.depth          
 
-    def Drift_exp(self, sampled=None, protected=False, spectral=True, abs_coeff=False, trotter=False, depth=1000):
-        if sampled != None:
-            Vo, coeffo, idxo = sampled[0], sampled[1], sampled[2]
-        else:
-            Vo, coeffo, idxo = self.Drift_step(abs_coeff)
-        
-        # print(Vo)
-        for v in Vo:
-            self.terms += len(v)
-        if self.terms < depth:
-            V, coeff, idx = Vo, coeffo, idxo 
-        else:
+    def Drift_exp(self, sampled=None, protected=False, spectral=True, abs_coeff=False, trotter=False, depth=1000, measurement='H'):
+        for m in range(self.M):
+            if sampled != None:
+                Vo, coeffo, idxo = sampled[0], sampled[1], sampled[2]
+            else:
+                Vo, coeffo, idxo = self.Drift_step(abs_coeff)
+            
+            # print(Vo)
+            for v in Vo:
+                self.terms += len(v)
+            # if self.terms < depth:
+            #     V, coeff, idx = Vo, coeffo, idxo 
+            # else:
             V = []
             coeff = []
             idx = []
@@ -237,93 +251,98 @@ class AlgorithmHamSimqDrift:
                 coeff.append(coeffo[count])
                 idx.append(idxo[count])
                 count+=1
-                # print(V)
-            self._rep = depth
-        # print(V, coeff, idx)
-        # op = [0]*self._n_qubits
-        # for i in range(self._n_qubits):
-        #     op[i] = Pauli.Z 
-        # print(V)
-        for n in range(0,min(count, self._rep+1)):
-            if n ==0:
-                circ = self.circuit.copy()
-                self.depth.append(0)
-            else:
-                if n == 1:
-                    circ = self.circuit.copy() 
-                # for _ in range(n):
-                    # print(V, coeff, idx)
-                if protected:
-                    # for i in range(self._n_qubits):
-                    #     circ.Ry(0.25, i)
-                    # pbox = PauliExpBox(identity, 0.02*n)
-                    # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
-                    # for i in range(self._n_qubits):
-                    #     circ.Ry(-0.25, i)
+                    # print(V)
+                self._rep = depth
+            # print(V, coeff, idx)
+            # op = [0]*self._n_qubits
+            # for i in range(self._n_qubits):
+            #     op[i] = Pauli.Z 
+            # print(V)
+            # print(count)
+            for n in range(0,min(count, self._rep+1)):
+                if n ==0:
+                    circ = self.circuit.copy()
+                    self.depth.append(0)
+                else:
+                    if n == 1:
+                        circ = self.circuit.copy() 
+                    # for _ in range(n):
+                        # print(V, coeff, idx)
+                    if protected:
+                        # for i in range(self._n_qubits):
+                        #     circ.Ry(0.25, i)
+                        # pbox = PauliExpBox(identity, 0.02*n)
+                        # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+                        # for i in range(self._n_qubits):
+                        #     circ.Ry(-0.25, i)
+                    
+                    # n -= 1
+                # cir.append(self.construct_protection(n).dagger())
+                # pbox = PauliExpBox([Pauli.Z]*self._n_qubits, -0.02*n) 
+                # cir.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+                        # protect_cir = self.construct_protection(n)
+                        # circ.append(protect_cir)
+                        # protect_cir_dagger = protect_cir.dagger()
+                        circ.append(self.construct_number_protection(n))
+                    for j in range(self.N):
+                        # print((n-1)*self.N+j)
+                        if trotter and len(V[(n-1)*self.N+j])>1 and not check_commutivity(V[(n-1)*self.N+j]):
+                            # print(V[(n-1)*self.N+j])
+                            V1 = V[(n-1)*self.N+j] 
+                            V2 = V[(n-1)*self.N+j][::-1]
+                            V_new = V1 + V2
+                            for i in range(len(V_new)):
+                                p = self.Convert_String_to_Op(V_new[i])
+                                pbox = PauliExpBox(p, coeff[(n-1)*self.N+j]/2)
+                                circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+                            self.depth.append(self.depth[-1]+len(V_new)) 
+                        else:
+                            # print(n)
+                            # print(n,V[(n-1)*self.N+j])
+                            for paulis in V[(n-1)*self.N+j]:
+                                p = self.Convert_String_to_Op(paulis)
+                                pbox = PauliExpBox(p, coeff[(n-1)*self.N+j])
+                                circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+                            self.depth.append(self.depth[-1]+len(V[(n-1)*self.N+j])) 
+
+                    if protected:
+                        circ.append(self.construct_number_protection(n,True))
+                            # circ.append(protect_cir_dagger)
+                        #     # for i in range(self._n_qubits):
+                        #     for i in range(self._n_qubits):
+                        #         circ.Ry(-0.25, i)
+                        #     pbox = PauliExpBox(identity, -0.02*n)
+                        #     circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+                        #     for i in range(self._n_qubits):
+                        #         circ.Ry(0.25, i)
+                                # pbox = PauliExpBox(self.Convert_String_to_Op(self.replacer(identity,i,'Z')), -0.02*n) 
+                                # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+
+                naive_circuit = circ.copy()
+                Transform.DecomposeBoxes().apply(naive_circuit)
                 
-                # n -= 1
-            # cir.append(self.construct_protection(n).dagger())
-            # pbox = PauliExpBox([Pauli.Z]*self._n_qubits, -0.02*n) 
-            # cir.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
-                    # protect_cir = self.construct_protection(n)
-                    # circ.append(protect_cir)
-                    # protect_cir_dagger = protect_cir.dagger()
-                    circ.append(self.construct_number_protection(n))
-                for j in range(self.N):
-                    # print((n-1)*self.N+j)
-                    if trotter and len(V[(n-1)*self.N+j])>1 and not check_commutivity(V[(n-1)*self.N+j]):
-                        # print(V[(n-1)*self.N+j])
-                        V1 = V[(n-1)*self.N+j] 
-                        V2 = V[(n-1)*self.N+j][::-1]
-                        V_new = V1 + V2
-                        for i in range(len(V_new)):
-                            p = self.Convert_String_to_Op(V_new[i])
-                            pbox = PauliExpBox(p, coeff[(n-1)*self.N+j]/2)
-                            circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
-                        self.depth.append(self.depth[-1]+len(V_new)) 
-                    else:
-                        # print(n)
-                        # print(n,V[(n-1)*self.N+j])
-                        for paulis in V[(n-1)*self.N+j]:
-                            p = self.Convert_String_to_Op(paulis)
-                            pbox = PauliExpBox(p, coeff[(n-1)*self.N+j])
-                            circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
-                        self.depth.append(self.depth[-1]+len(V[(n-1)*self.N+j])) 
+                # print(tk_to_qiskit(naive_circuit))
+                if spectral:
+                    self.U_sims[m].append(naive_circuit.get_unitary())
+                    
+                else:
+                    # naive_circuit.measure_all()
+                    # compiled_circuit = self.backend.get_compiled_circuit(naive_circuit)
+                    # handle = self.backend.process_circuit(compiled_circuit, n_shots=100)
+                    # counts = self.backend.get_result(handle).get_counts()
+                    # self.shots.append(counts)
+                    # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
+                    statevec = naive_circuit.get_statevector()
+                    if measurement=='H':
+                        self.E.append((statevec.conj().T@self.H)@statevec)
+                    elif measurement=='Z':
+                        self.E.append((statevec.conj().T@self.Z)@statevec) 
 
-                if protected:
-                    circ.append(self.construct_number_protection(n,True))
-                        # circ.append(protect_cir_dagger)
-                    #     # for i in range(self._n_qubits):
-                    #     for i in range(self._n_qubits):
-                    #         circ.Ry(-0.25, i)
-                    #     pbox = PauliExpBox(identity, -0.02*n)
-                    #     circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
-                    #     for i in range(self._n_qubits):
-                    #         circ.Ry(0.25, i)
-                            # pbox = PauliExpBox(self.Convert_String_to_Op(self.replacer(identity,i,'Z')), -0.02*n) 
-                            # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
-
-            naive_circuit = circ.copy()
-            Transform.DecomposeBoxes().apply(naive_circuit)
-            
-            # print(tk_to_qiskit(naive_circuit))
-            if spectral:
-                self.U_sims.append(naive_circuit.get_unitary())
-                
-            else:
-                naive_circuit.measure_all()
-                compiled_circuit = self.backend.get_compiled_circuit(naive_circuit)
-                handle = self.backend.process_circuit(compiled_circuit, n_shots=100)
-                counts = self.backend.get_result(handle).get_counts()
-                self.shots.append(counts)
-
-            # statevec = self.statebackend.run_circuit(compiled_circuit).get_state()
-            # self.exp.append(abs(np.vdot(self._initial_state,statevec))**2)
-            # self.E[self._time_space[n]] = self.H.state_expectation(statevec, [Qubit(i) for i in range(self._n_qubits)]) 
         if spectral:
             return self.U_sims, [V, coeff, idx], self.depth
         else:
-            return count_parity(self.shots), [V, coeff, idx]
+            # return count_parity(self.shots), [V, coeff, idx]
+            return self.E, [V, coeff, idx], self.depth
 
 
     def execute(self, real=None, color='purple', plot=False):

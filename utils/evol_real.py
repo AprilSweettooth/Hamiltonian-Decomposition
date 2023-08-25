@@ -35,7 +35,7 @@ pauli_matrices = {
     'I': np.array([[1, 0], [0, 1]])
 }
 
-def pauli_string_to_matrix(pauli_string, coeff):
+def pauli_string_to_matrix(pauli_string, coeff=1):
     # Split the Pauli string into coefficient and operator parts
     coefficient, operators = coeff, pauli_string
     
@@ -91,4 +91,27 @@ def U_drift(init, rep, n, t_max, V, coeff):
         evol.append(m)
     return evol
 
-
+def U_trotter(init, n, V, coeff, t_max, order=1):
+    evol = []
+    evol.append(init)
+    t_step = t_max/n
+    m = init
+    V2 = V + V[::-1]
+    coeff2 = (coeff + coeff[::-1])
+    for i in range(1,n+1):
+        if order==1:
+            for j in range(len(V)):
+                result_matrix =  pauli_matrices[V[j][0]] 
+                for op in V[j][1:]:
+                    result_matrix = np.kron(result_matrix, pauli_matrices[op])
+                identity = np.eye(init.shape[0],init.shape[1])
+                m = (np.cos(coeff[j] * t_step)*identity - 1j*np.sin(coeff[j] * t_step)*result_matrix )@m
+        elif order==2:
+            for j in range(len(V2)):
+                result_matrix =  pauli_matrices[V2[j][0]] 
+                for op in V2[j][1:]:
+                    result_matrix = np.kron(result_matrix, pauli_matrices[op])
+                identity = np.eye(init.shape[0],init.shape[1])
+                m = (np.cos(coeff2[j]/2 * np.pi/4 * t_step)*identity - 1j*np.sin(coeff2[j]/2 * np.pi/4 * t_step)*result_matrix )@m 
+        evol.append(m)
+    return evol

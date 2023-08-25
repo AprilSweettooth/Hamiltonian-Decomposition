@@ -27,7 +27,7 @@ def JW_transformation(iop):
         qubit_operator: An instance of the QubitOperator class.
     """
     # Initialize qubit operator as constant.
-    number, coulomb, excitation, no_excitation, double_excitation = QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant) 
+    number, coulomb, no_excitation, hopping, double_excitation = QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant) 
     # qubit_operator = QubitOperator((), iop.constant)
     n_qubits=count_qubits(iop)
     # Transform diagonal one-body terms
@@ -42,7 +42,7 @@ def JW_transformation(iop):
         coefficient = .5 * (iop[(p, 1), (q, 0)] + iop[(q, 1),
                                                       (p, 0)].conjugate())
         # qubit_operator += jordan_wigner_one_body(p, q, coefficient)
-        excitation += jordan_wigner_one_body(p, q, coefficient)
+        hopping += jordan_wigner_one_body(p, q, coefficient)
 
         # Two-body
         coefficient = (iop[(p, 1), (q, 1), (p, 0),
@@ -53,7 +53,6 @@ def JW_transformation(iop):
                                                                      (q, 0),
                                                                      (p, 0)])
         coulomb += jordan_wigner_two_body(p, q, p, q, coefficient)
-        no_excitation += jordan_wigner_two_body(p, q, p, q, coefficient)
 
     # Transform the rest of the two-body terms
     for (p, q), (r, s) in itertools.combinations(
@@ -70,9 +69,12 @@ def JW_transformation(iop):
                              iop[(q, 1), (p, 1), (s, 0),
                                  (r, 0)] + iop[(r, 1), (s, 1), (p, 0),
                                                (q, 0)].conjugate())
-        double_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
+        if len(set([p, q, r, s])) == 3:
+            no_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
+        else:
+            double_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
 
-    return number, coulomb, excitation, no_excitation, double_excitation
+    return number, coulomb, hopping, no_excitation, double_excitation
 
 
 def jordan_wigner_one_body(p, q, coefficient=1.):
