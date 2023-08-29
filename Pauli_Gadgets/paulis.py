@@ -1,27 +1,38 @@
 from pytket.circuit import Circuit
 import itertools as it
+import numpy as np
 
-def PauliGadget(strings,t):
+def Noise_PauliGadget(strings,t,p):
     Circ = Circuit(len(strings))
     for i in range(len(strings)):
         if strings[i] == 'Z' or strings[i] == 'I':
             continue
         elif strings[i] =='X':
             Circ.H(i)
+            add_noise(Circ, p, [i])
         elif strings[i] == 'Y':
-            Circ.Sdg(i).H(i)
+            Circ.Sdg(i)
+            add_noise(Circ, p, [i])
+            Circ.H(i)
+            add_noise(Circ, p, [i])
     for j in range(len(strings)-1):
         Circ.CX(j+1,j)
+        add_noise(Circ, p, [j+1,j])
     Circ.Rz(t, len(strings)-1)
     for j in range(len(strings)-1,0,-1):
         Circ.CX(j,j-1)
+        add_noise(Circ, p, [j,j-1])
     for i in range(len(strings)):
         if strings[i] == 'Z' or strings[i] == 'I':
             continue
         elif strings[i] =='X':
             Circ.H(i)
+            add_noise(Circ, p, [i])
         elif strings[i] == 'Y':
-            Circ.H(i).S(i) 
+            Circ.H(i)
+            add_noise(Circ, p, [i])
+            Circ.S(i)
+            add_noise(Circ, p, [i]) 
     return Circ
 
 def sim_noise(num_qubits,param):
@@ -42,3 +53,19 @@ def sim_noise(num_qubits,param):
     # as the all identity string is first.
     paulis = ["".join(tup) for tup in it.product(["I", "X", "Y", "Z"], repeat=num_qubits)]
     return paulis
+
+def add_noise(Circ, p, pos_qubit):
+    # if num_qubits != len(pos_qubit):
+    #     raise Exception('Need same number of qubits and error gates')
+    x = np.random.random()
+    paulis = ["".join(tup) for tup in it.product(["I", "X", "Y", "Z"], repeat=len(pos_qubit))][1:]
+    if x <= p:
+        y = np.random.choice(paulis)
+        for i in range(len(pos_qubit)):
+            if y[i]=='X':
+                Circ.X(pos_qubit[i])
+            elif y[i]=='Y':
+                Circ.Y(pos_qubit[i])
+            elif y[i]=='Z':
+                Circ.Z(pos_qubit[i])
+    return Circ

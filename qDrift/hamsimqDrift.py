@@ -1,8 +1,10 @@
 from utils.plot import evol_plot
 from utils.func import count_parity
-from trotter.hamsimtrotter import AlgorithmHamSimTrotter
 from utils.term_grouping import check_commutivity
 from utils.evol_real import get_Hmatrix, pauli_string_to_matrix
+
+from trotter.hamsimtrotter import AlgorithmHamSimTrotter
+from Pauli_Gadgets.paulis import Noise_PauliGadget
 
 from pytket.pauli import Pauli
 from pytket.circuit import Circuit, PauliExpBox
@@ -27,6 +29,8 @@ class AlgorithmHamSimqDrift:
                  t_max: float,
                  reps: int,
                  seg: int,
+                 noise_param=0.001,
+                 noise=False,
                  M=1,
                  H_matrix=None):
 
@@ -56,6 +60,8 @@ class AlgorithmHamSimqDrift:
         self.H = H_matrix
         self.E = []
         self.M = M
+        self.noise = noise
+        self.noise_param = noise_param
         # self.U_sim = np.zeros((2**self._n_qubits,2**self._n_qubits)) 
 
     def sampling(self,idx, prob):
@@ -150,8 +156,11 @@ class AlgorithmHamSimqDrift:
         Cir = c.copy()
         c_dagger = Cir.dagger()
         protection.append(c)
-        pbox = PauliExpBox([Pauli.Z]*self._n_qubits, 0.02*n)
-        protection.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+        if not self.noise:
+            pbox = PauliExpBox([Pauli.Z]*self._n_qubits, 0.02*n)
+            protection.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+        else:
+            protection.append(Noise_PauliGadget('Z'*self._n_qubits,0.02*n,self.noise_param))
         protection.append(c_dagger)
         if conj:
             return protection.dagger()
@@ -172,7 +181,7 @@ class AlgorithmHamSimqDrift:
         else:
             return circ
         
-    def trotter(self, order=1, spectral=True, protected=False, measurement='H'):
+    def trotter(self, order=1, spectral=True, protected=False, measurement='H',rand=False):
         time_step = self._rep
         for n in range(time_step+1):
             if n==0:
@@ -188,23 +197,37 @@ class AlgorithmHamSimqDrift:
                         circ.append(self.construct_number_protection(n))
                     for i in range(len(ops)):
                         p = self.Convert_String_to_Op(ops[i])
-                        pbox = PauliExpBox(p, self.t_max*co[i]/(time_step*np.pi))
-                        circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))  
+                        if not self.noise:
+                            # pbox = PauliExpBox(p, self.t_max*co[i]/(time_step*np.pi))
+                            # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+                            circ.append(Noise_PauliGadget(p,self.t_max*co[i]/(time_step*np.pi),0)) 
+                        else:
+                            circ.append(Noise_PauliGadget(p,self.t_max*co[i]/(time_step*np.pi),self.noise_param))
                     self.depth.append(self.depth[-1]+len(ops))  
                 else:
-                    ops = self._qubit_operator
+                    if rand:
+                        ops = np.random.permutation(self._qubit_operator)
+                        # print(ops)
+                    else:
+                        ops = self._qubit_operator
                     if protected:
                         circ.append(self.construct_number_protection(n))
                     for i in range(len(ops)):
                         p = self.Convert_String_to_Op(ops[i])
-                        pbox = PauliExpBox(p,self.t_max*self.coeff[i]/(time_step*np.pi/2))
-                        circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
-                    self.depth.append(self.depth[-1]+len(ops))  
+                        if not self.noise:
+                            # pbox = PauliExpBox(p,self.t_max*self.coeff[i]/(time_step*np.pi/2))
+                            # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+                            circ.append(Noise_PauliGadget(p,self.t_max*self.coeff[i]/(time_step*np.pi/2),0))  
+                            # print(circ.depth(), circ.n_gates) 
+                        else:
+                            circ.append(Noise_PauliGadget(p,self.t_max*self.coeff[i]/(time_step*np.pi/2),self.noise_param)) 
+                    self.depth.append(self.depth[-1]+len(ops)) 
+                
 
             if protected:
                 circ.append(self.construct_number_protection(n,True)) 
             naive_circuit = circ.copy()
-            Transform.DecomposeBoxes().apply(naive_circuit)
+            # Transform.DecomposeBoxes().apply(naive_circuit)
             
             # print(tk_to_qiskit(naive_circuit))
             if spectral:
@@ -230,39 +253,45 @@ class AlgorithmHamSimqDrift:
     def Drift_exp(self, sampled=None, protected=False, spectral=True, abs_coeff=False, trotter=False, depth=1000, measurement='H'):
         if self.M != 1:
             self.depth = [[],[],[]]
+            Vs, coeffs, idxs = [],[],[] 
         else:
+            Vs, coeffs, idxs = [],[],[] 
             self.depth = [[]]
         for m in range(self.M):
-            if sampled != None:
-                Vo, coeffo, idxo = sampled[0], sampled[1], sampled[2]
-            else:
+            if sampled == None:
                 Vo, coeffo, idxo = self.Drift_step(abs_coeff)
-            
-            # print(Vo)
-            for v in Vo:
-                self.terms += len(v)
-            # if self.terms < depth:
-            #     V, coeff, idx = Vo, coeffo, idxo 
-            # else:
-            V = []
-            coeff = []
-            idx = []
-            count = 0
-            depth_itr = depth
-            while depth_itr > 0:
-                V.append(Vo[count])
-                depth_itr -= len(Vo[count])
-                coeff.append(coeffo[count])
-                idx.append(idxo[count])
-                count+=1
-                    # print(V)
+                
+                # print(Vo)
+                for v in Vo:
+                    self.terms += len(v)
+                # if self.terms < depth:
+                #     V, coeff, idx = Vo, coeffo, idxo 
+                # else:
+                V = []
+                coeff = []
+                idx = []
+                count = 0
+                depth_itr = depth
+                while depth_itr > 0:
+                    V.append(Vo[count])
+                    depth_itr -= len(Vo[count])
+                    coeff.append(coeffo[count])
+                    idx.append(idxo[count])
+                    count+=1
+                        # print(V)
                 self._rep = depth
-            # print(V, coeff, idx)
-            # op = [0]*self._n_qubits
-            # for i in range(self._n_qubits):
-            #     op[i] = Pauli.Z 
-            # print(V)
-            # print(count)
+                Vs.append(V)
+                coeffs.append(coeff)
+                idxs.append(idx)
+                # print(V, coeff, idx)
+                # op = [0]*self._n_qubits
+                # for i in range(self._n_qubits):
+                #     op[i] = Pauli.Z 
+                # print(V)
+                # return V
+            else:
+                V, coeff, idx = sampled[0][m], sampled[1][m], sampled[2][m]
+                count = len(V)
             for n in range(0,min(count, self._rep+1)):
                 if n ==0:
                     circ = self.circuit.copy()
@@ -297,16 +326,24 @@ class AlgorithmHamSimqDrift:
                             V_new = V1 + V2
                             for i in range(len(V_new)):
                                 p = self.Convert_String_to_Op(V_new[i])
-                                pbox = PauliExpBox(p, coeff[(n-1)*self.N+j]/2)
-                                circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+                                if not self.noise:
+                                    pbox = PauliExpBox(p, coeff[(n-1)*self.N+j]/2)
+                                    circ.add_pauliexpbox(pbox, np.arange(self._n_qubits)) 
+                                else:
+                                    circ.append(Noise_PauliGadget(p,coeff[(n-1)*self.N+j]/2,self.noise_param))  
                             self.depth[m].append(self.depth[m][-1]+len(V_new)) 
                         else:
                             # print(n)
-                            # print(n,V[(n-1)*self.N+j])
+                            # print((n-1)*self.N+j])
+                        
                             for paulis in V[(n-1)*self.N+j]:
                                 p = self.Convert_String_to_Op(paulis)
-                                pbox = PauliExpBox(p, coeff[(n-1)*self.N+j])
-                                circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+                                if not self.noise:
+                                    # pbox = PauliExpBox(p, coeff[(n-1)*self.N+j])
+                                    # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
+                                    circ.append(Noise_PauliGadget(p,coeff[(n-1)*self.N+j],0))  
+                                else:
+                                    circ.append(Noise_PauliGadget(p,coeff[(n-1)*self.N+j],self.noise_param))   
                             self.depth[m].append(self.depth[m][-1]+len(V[(n-1)*self.N+j])) 
 
                     if protected:
@@ -321,9 +358,9 @@ class AlgorithmHamSimqDrift:
                         #         circ.Ry(0.25, i)
                                 # pbox = PauliExpBox(self.Convert_String_to_Op(self.replacer(identity,i,'Z')), -0.02*n) 
                                 # circ.add_pauliexpbox(pbox, np.arange(self._n_qubits))
-
+                # print(circ.depth(), circ.n_gates)
                 naive_circuit = circ.copy()
-                Transform.DecomposeBoxes().apply(naive_circuit)
+                # Transform.DecomposeBoxes().apply(naive_circuit)
                 
                 # print(tk_to_qiskit(naive_circuit))
                 if spectral:
@@ -343,7 +380,10 @@ class AlgorithmHamSimqDrift:
                         self.E.append((statevec.conj().T@self.Z)@statevec) 
 
         if spectral:
-            return self.U_sims, [V, coeff, idx], self.depth
+            if sampled == None:
+                return self.U_sims, [Vs, coeffs, idxs], self.depth
+            else:
+                return self.U_sims, [V, coeff, idx], self.depth
         else:
             # return count_parity(self.shots), [V, coeff, idx]
             return self.E, [V, coeff, idx], self.depth

@@ -68,21 +68,95 @@ def replace_Pauli_strings(n,list_paulis):
         identity = identity[:pos] + pauli + identity[pos + 1:] 
     return identity
 
-def convert_op_to_input(ops,n):
+def convert_op_to_input(ops,n,nested=False):
     tk_op = []
     tk_coeff = []
-    for term, coeff in ops.terms.items():
-        tk_op.append(replace_Pauli_strings(n,list(term)))
-        tk_coeff.append(coeff)
-    return tk_op[1:],tk_coeff[1:]
+    if nested:
+        for i in range(len(ops)):
+            tk_op.append([])
+            tk_coeff.append([])
+            for term, coeff in ops[i].terms.items():
+                tk_op[i].append(replace_Pauli_strings(n,list(term)))
+                tk_coeff[i].append(coeff)
+        return [op[1:] for op in tk_op], [co[1:] for co in tk_coeff]
+    else:
+        for term, coeff in ops.terms.items():
+            tk_op.append(replace_Pauli_strings(n,list(term)))
+            tk_coeff.append(coeff)
+        return tk_op[1:],tk_coeff[1:]
 
-def convert_twobody_op_to_input(ops,n):
+def convert_twobody_op_to_input(ops,n,nested=False):
     tk_op = []
     tk_coeff = []
-    for term, coeff in ops.terms.items():
-        tk_op.append(replace_Pauli_strings(n,list(term)))
-        tk_coeff.append(coeff)
-    return tk_op,tk_coeff
+    if nested:
+        for i in range(len(ops)):
+            tk_op.append([])
+            tk_coeff.append([])
+            for term, coeff in ops[i].terms.items():
+                tk_op[i].append(replace_Pauli_strings(n,list(term)))
+                tk_coeff[i].append(coeff)
+        return tk_op, tk_coeff
+    else:
+        for term, coeff in ops.terms.items():
+            tk_op.append(replace_Pauli_strings(n,list(term)))
+            tk_coeff.append(coeff)
+        return tk_op,tk_coeff
+
+def search_U_with_no_exp(idx,depth):
+    count = 0
+    idx_tmp = idx
+    while idx_tmp>0:
+        idx_tmp -= depth[count]
+        count += 1
+    count -= 1
+    if abs(idx_tmp) > depth[count]//2:
+        return count - 1
+    else:
+        return count
+def extract_U_at_t(t,U,depth):
+    if t[-1]/depth[-1] > t[0]:
+        raise Exception('Get a smaller sample steps')
+    U_new = [U[0]]
+    t_step = t[-1]/depth[-1]
+    for i in range(len(t)):
+        idx = int(t[i] / t_step)
+        U_new.append(U[search_U_with_no_exp(idx,depth)])
+    return U_new
+
+def Monte_Carlo_ave(t,U,depth,Ur,M=3):
+    U_new = []
+    U_mean = []
+    for i in range(M):
+        U_new.append(extract_U_at_t(t,U[i],depth[i]))
+    for j in range(M):
+        U_mean.append([np.abs(linalg.eig(u - u_exc)[0]).max() for u,u_exc in zip(U_new[j],Ur)])
+    return np.mean(U_mean,axis=0),np.std(U_mean,axis=0) 
+
+def site_excitation_group(number,hopping,nco,hco):
+    group = []
+    coeff = []
+    for i in range(len(hopping)):
+        group.append([])
+        coeff.append([])
+        pos = [idx for idx in range(len(hopping[i][0])) if hopping[i][0][idx]=='X' ]
+        if len(pos) != 2:
+            raise Exception('Excitation not conserved')
+        for j in range(2):
+            group[i].append(number[pos[j]][0])
+            coeff[i].append(nco[pos[j]][0])
+            number[pos[j]] = 'I'*len(number[0])
+            nco[pos[j]] = 0 
+        group[i].append(hopping[i][0])
+        group[i].append(hopping[i][1])
+        coeff[i].append(hco[i][0])
+        coeff[i].append(hco[i][1])
+    group.append([])
+    coeff.append([])
+    for k in range(len(number)):
+        if number[k][0] != 'I'*len(number[0]):
+            group[-1].append(number[k][0])
+            coeff[-1].append(nco[k][0])
+    return group, coeff
 
 # !/usr/bin/env python3
 # Copyright (c) 2022 Institute for Quantum Computing, Baidu Inc. All Rights Reserved.

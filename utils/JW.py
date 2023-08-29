@@ -15,7 +15,7 @@ import numpy
 from openfermion.ops.operators import QubitOperator
 from openfermion.utils.operator_utils import count_qubits
 
-def JW_transformation(iop, cancel=True):
+def JW_transformation(iop, group_by_idx=False):
     """Output InteractionOperator as QubitOperator class under JW transform.
 
     One could accomplish this very easily by first mapping to fermions and
@@ -29,13 +29,19 @@ def JW_transformation(iop, cancel=True):
     # Initialize qubit operator as constant.
     number, coulomb, no_excitation, hopping, double_excitation = QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant), QubitOperator((), iop.constant) 
     # qubit_operator = QubitOperator((), iop.constant)
-    double_excitations = []
+    numbers, coulombs, no_excitations, hoppings, double_excitations = [], [], [], [], []
     n_qubits=count_qubits(iop)
     # Transform diagonal one-body terms
     for p in range(n_qubits):
         coefficient = iop[(p, 1), (p, 0)]
         # qubit_operator += jordan_wigner_one_body(p, p, coefficient)
-        number += jordan_wigner_one_body(p, p, coefficient) 
+        if not group_by_idx:
+            number += jordan_wigner_one_body(p, p, coefficient) 
+        else:
+            nb = jordan_wigner_one_body(p, p, coefficient)
+            # print(nb) 
+            if list(nb):
+                numbers.append(nb) 
 
     # Transform other one-body terms and "diagonal" two-body terms
     for p, q in itertools.combinations(range(n_qubits), 2):
@@ -43,8 +49,13 @@ def JW_transformation(iop, cancel=True):
         coefficient = .5 * (iop[(p, 1), (q, 0)] + iop[(q, 1),
                                                       (p, 0)].conjugate())
         # qubit_operator += jordan_wigner_one_body(p, q, coefficient)
-        hopping += jordan_wigner_one_body(p, q, coefficient)
-
+        if not group_by_idx:
+            hopping += jordan_wigner_one_body(p, q, coefficient)
+        else:
+            hp = jordan_wigner_one_body(p, q, coefficient)
+            # print(hp)
+            if list(hp):
+                hoppings.append(hp)
         # Two-body
         coefficient = (iop[(p, 1), (q, 1), (p, 0),
                            (q, 0)] - iop[(p, 1), (q, 1), (q, 0),
@@ -53,7 +64,12 @@ def JW_transformation(iop, cancel=True):
                                                                      (p, 1),
                                                                      (q, 0),
                                                                      (p, 0)])
-        coulomb += jordan_wigner_two_body(p, q, p, q, coefficient)
+        if not group_by_idx:
+            coulomb += jordan_wigner_two_body(p, q, p, q, coefficient)
+        else:
+            cb = jordan_wigner_two_body(p, q, p, q, coefficient)
+            if list(cb):
+                coulombs.append(cb)
 
     # Transform the rest of the two-body terms
     for (p, q), (r, s) in itertools.combinations(
@@ -71,20 +87,26 @@ def JW_transformation(iop, cancel=True):
                                  (r, 0)] + iop[(r, 1), (s, 1), (p, 0),
                                                (q, 0)].conjugate())
         if len(set([p, q, r, s])) == 3:
-            no_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
+            if not group_by_idx:
+                no_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
+            else:
+                no = jordan_wigner_two_body(p, q, r, s, coefficient)
+                if list(no):
+                    no_excitations.append(no)
         elif len(set([p,q,r,s])) == 4:
             # print(p,q,r,s)
             # print(jordan_wigner_two_body(p, q, r, s, coefficient))
-            if cancel:
+            if not group_by_idx:
                 double_excitation += jordan_wigner_two_body(p, q, r, s, coefficient)
             else:
                 scatter = jordan_wigner_two_body(p, q, r, s, coefficient)
+                # print(scatter)
                 if list(scatter):
                     double_excitations.append(scatter)
-    if cancel:
+    if not group_by_idx:
         return number, coulomb, hopping, no_excitation, double_excitation
     else:
-        return number, coulomb, hopping, no_excitation, double_excitations
+        return numbers, coulombs, hoppings, no_excitations, double_excitations
 
 
 def jordan_wigner_one_body(p, q, coefficient=1.):
