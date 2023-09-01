@@ -20,7 +20,7 @@ def get_Hmatrix(V,n,co):
     H_matrix = get_sparse_operator(Hq)
     return H_matrix
 
-def U_exc(init, n, t_max, H_matrix, final=True):
+def U_exc(init, n, t_max, H_matrix, final=False):
     t_step = t_max/n
     if final:
         return ssl.expm(-1j * H_matrix * t_max).toarray()@init
@@ -114,61 +114,77 @@ def add_depolarizing_error(circuit_matrix, num_qubits, error_rate):
     return noisy_circuit_matrix
 
 def U_drift(init, rep, n, t_max, V, coeff, n_qubits,state, measurement=None, error=None):
-    t_step = t_max/rep
-    m = init
-    for j in range(1,n+1):
-        for i in range(rep):
-            # print((j-1)*rep+i)
-            for v in V[(j-1)*rep+i]:
-                if error != None:
-                    result_matrix =  apply_depolarizing_error(pauli_matrices[v[0]],error)
-                    for op in v[1:]:
-                        result_matrix = np.kron(result_matrix, apply_depolarizing_error(pauli_matrices[op],error))
-                    identity = np.eye(init.shape[0],init.shape[1])
-                    m = (np.cos(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*result_matrix )@m 
-                else:
-                    result_matrix =  pauli_matrices[v[0]] 
-                    for op in v[1:]:
-                        result_matrix = np.kron(result_matrix, pauli_matrices[op])
-                    identity = np.eye(init.shape[0],init.shape[1])
-                    m = (np.cos(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*result_matrix )@m
-        # depth.append(depth[-1]+len(V[(j-1)*rep+i]))
-        # print(m)
-    return m
-
-    # evol = []
-    # depth = [0]
-    # evol.append(init)
     # t_step = t_max/rep
+    # evol = []
     # m = init
     # for j in range(1,n+1):
-    #     for i in range(rep):
+    #     for i in range(1):
     #         # print((j-1)*rep+i)
-    #         for v in V[(j-1)*rep+i]:
+    #         for v in V[(j-1)*1+i]:
     #             if error != None:
     #                 result_matrix =  apply_depolarizing_error(pauli_matrices[v[0]],error)
     #                 for op in v[1:]:
     #                     result_matrix = np.kron(result_matrix, apply_depolarizing_error(pauli_matrices[op],error))
     #                 identity = np.eye(init.shape[0],init.shape[1])
-    #                 m = (np.cos(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*result_matrix )@m 
+    #                 m = (np.cos(coeff[(j-1)*1+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*1+i] * np.pi/4 * t_step)*result_matrix )@m 
     #             else:
     #                 result_matrix =  pauli_matrices[v[0]] 
     #                 for op in v[1:]:
     #                     result_matrix = np.kron(result_matrix, pauli_matrices[op])
     #                 identity = np.eye(init.shape[0],init.shape[1])
-    #                 m = (np.cos(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*rep+i] * np.pi/4 * t_step)*result_matrix )@m
-    #     depth.append(depth[-1]+len(V[(j-1)*rep+i]))
+    #                 m = (np.cos(coeff[(j-1)*1+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*1+i] * np.pi/4 * t_step)*result_matrix )@m
+    #         evol.append(m)
+    #     # depth.append(depth[-1]+len(V[(j-1)*rep+i]))
     #     # print(m)
-    #     evol.append(m)
-    # if measurement==None:
-    #     return evol, depth
-    # elif isinstance(measurement,str):
-    #     statevecs = [unitary_to_statevector(unitary) for unitary in evol]
-    #     Z = sum([ft.reduce(np.kron,[np.array([[1, 0], [0, 1]])]*n_qubits) for _ in range(6)]) - sum([pauli_string_to_matrix(replacer('I'*n_qubits, idx, 'Z')) for idx in range(6)])
-    #     return [(statevec.conj().T@Z)@statevec for statevec in statevecs], depth
-    # else:
-    #     statevecs = [unitary_to_statevector(unitary) for unitary in evol]
-    #     return [(statevec.conj().T@measurement)@statevec for statevec in statevecs], depth 
+    # return evol
+    # print(1)
+    evol = []
+    depth = [0]
+    evol.append(init)
+    t_step = t_max/rep
+    m = init
+    # print(coeff)
+    for j in range(1,n+1):
+        for i in range(1):
+            # print((j-1)*rep+i)
+            for v in V[(j-1)*1+i]:
+                # print(2)
+                if error != None:
+                    # print(v)
+                    result_matrix =  apply_depolarizing_error(pauli_matrices[v[0]],error)
+                    for op in v[1:]:
+                        result_matrix = np.kron(result_matrix, apply_depolarizing_error(pauli_matrices[op],error))
+                    identity = np.eye(init.shape[0],init.shape[1])
+                    m = (np.cos(coeff[(j-1)*1+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*1+i] * np.pi/4 * t_step)*result_matrix )@m 
+                else:
+                    result_matrix =  pauli_matrices[v[0]] 
+                    for op in v[1:]:
+                        # print('here')
+                        result_matrix = np.kron(result_matrix, pauli_matrices[op])
+                    # if v[1]=='X':
+                    #     for j in range(len(result_matrix)):
+                    #         print(result_matrix[j])
+                    #     print(v)
+                    identity = np.eye(init.shape[0],init.shape[1])
+                    m = (np.cos(coeff[(j-1)*1+i] * np.pi/4 * t_step)*identity - 1j*np.sin(coeff[(j-1)*1+i] * np.pi/4 * t_step)*result_matrix )@m
+                    # print(op)
+                    # if 'X' in op:
+                    #     print(result_matrix)
+                    # print(m)
+        # print(V[(j-1)*1+i])
+        depth.append(depth[-1]+len(V[(j-1)*1+i]))
+        # print(m)
+        evol.append(m)
+    if measurement==None:
+        return evol, depth
+        # return evol[-1]
+    elif isinstance(measurement,str):
+        statevecs = [unitary_to_statevector(unitary) for unitary in evol]
+        Z = sum([ft.reduce(np.kron,[np.array([[1, 0], [0, 1]])]*n_qubits) for _ in range(6)]) - sum([pauli_string_to_matrix(replacer('I'*n_qubits, idx, 'Z')) for idx in range(6)])
+        return [(statevec.conj().T@Z)@statevec for statevec in statevecs], depth
+    else:
+        statevecs = [unitary_to_statevector(unitary) for unitary in evol]
+        return [(statevec.conj().T@measurement)@statevec for statevec in statevecs], depth 
 
 
 

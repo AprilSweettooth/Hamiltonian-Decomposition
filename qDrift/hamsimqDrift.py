@@ -281,9 +281,7 @@ class AlgorithmHamSimqDrift:
                 # print(Vo)
                 for v in Vo:
                     self.terms += len(v)
-                # if self.terms < depth:
-                #     V, coeff, idx = Vo, coeffo, idxo 
-                # else:
+      
                 V = []
                 coeff = []
                 idx = []
@@ -295,29 +293,29 @@ class AlgorithmHamSimqDrift:
                     coeff.append(coeffo[count])
                     idx.append(idxo[count])
                     count+=1
-                        # print(V)
+        
                 self._rep = depth
                 Vs.append(V)
                 coeffs.append(coeff)
                 idxs.append(idx)
-                # print(V, coeff, idx)
-                # op = [0]*self._n_qubits
-                # for i in range(self._n_qubits):
-                #     op[i] = Pauli.Z 
-                # print(count)
-                # return V
+    
             else:
                 V, coeff, idx = sampled[0][m], sampled[1][m], sampled[2][m]
+                # V, coeff, idx = sampled[0], sampled[1], sampled[2]
                 count = len(V)
             if cheat:
                 # print(V)
                 if self.noise:
                     evol, depths = U_drift(self.circuit.get_unitary(), rep=1, n=count, t_max=self.t_max, V=V, coeff=coeff, n_qubits=self._n_qubits, state=self._initial_state, measurement=measurement,error=self.noise_param)
                 else:
-                    evol = U_drift(self.circuit.get_unitary(), rep=1, n=count, t_max=self.t_max, V=V, coeff=coeff, n_qubits=self._n_qubits, state=self._initial_state, measurement=measurement)  
+                    # print(sum([len(V[i]) for i in range(len(V))]))
+                    # print(coeff)
+                    # print(0)
+
+                    evol, depths= U_drift(self.circuit.get_unitary(), rep=1, n=count, t_max=self.t_max, V=V, coeff=coeff, n_qubits=self._n_qubits, state=self._initial_state, measurement=measurement)  
                     # print(evol)
-                # evols[m].append(evol)
-                # self.depth[m].append(depths)
+                evols[m].append(evol)
+                self.depth[m].append(depths)
             else:
                 for n in range(0,min(count, self._rep+1)):
 
@@ -340,6 +338,7 @@ class AlgorithmHamSimqDrift:
                                 # print(tk_to_qiskit(circ))
                             else:
                                 circ.append(Noise_PauliGadget(paulis,coeff[n],self.noise_param))   
+                        
                         self.depth[m].append(self.depth[m][-1]+len(V[n])) 
                     # print(circ.depth(), circ.n_gates)
                     naive_circuit = circ.copy()
@@ -360,18 +359,21 @@ class AlgorithmHamSimqDrift:
                         if measurement=='H':
                             self.E.append((statevec.conj().T@self.H)@statevec)
                         elif measurement=='Z':
+                            if abs((statevec.conj().T@self.Z)@statevec - 6)>0.001:
+                                print(n,V[n],coeff[n])
                             self.E.append((statevec.conj().T@self.Z)@statevec) 
 
         if spectral:
             if sampled == None:
                 if cheat:
-                    # return evols, [Vs, coeffs, idxs], self.depth
-                    return evol
+                    return evols, [Vs, coeffs, idxs], self.depth
+                    # return evol
                 else:
                     return self.U_sims, [Vs, coeffs, idxs], self.depth
             else:
                 if cheat:
                     return evols, [Vs, coeffs, idxs], self.depth
+                    # return evol
                 else:
                     return self.U_sims, [V, coeff, idx], self.depth
         else:
