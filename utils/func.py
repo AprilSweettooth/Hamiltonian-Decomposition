@@ -102,38 +102,38 @@ def convert_twobody_op_to_input(ops,n,nested=False):
             tk_coeff.append(coeff)
         return tk_op,tk_coeff
 
-# def search_depth_with_no_exp(idx,depth):
-#     for i in range(1,len(depth)):
-#         # print(depth[i])
-#         if idx > depth[i]:
-#             continue
-#         elif idx == depth[i]:
-#             return depth[i]
-#         elif idx < depth[i]:
-#             if depth[i]-idx > idx-depth[i-1]:
-#                 return depth[i]
-#             else:
-#                 return depth[i-1]
+def search_depth_with_no_exp(idx,depth):
+    for i in range(1,len(depth)):
+        # print(depth[i])
+        if idx > depth[i]:
+            continue
+        elif idx == depth[i]:
+            return depth[i]
+        elif idx < depth[i]:
+            if depth[i]-idx > idx-depth[i-1]:
+                return depth[i]
+            else:
+                return depth[i-1]
 
-# def perm_ops(t,depth,sm):
-#     t_step = t[-1]/depth[-1]
-#     ind = [[],[],[]]
-#     V = [[],[],[]]
-#     coeff = [[],[],[]]
-#     depth_new = [[depth[i][0]] for i in range(len(depth))]
-#     for i in range(len(depth)):
-#         for j in range(len(t)):
-#             idx = int(t[j] / t_step)
-#             depth_new[i].append(search_depth_with_no_exp(idx,depth[i]))
-#     # print(depth_new)
-#     for i in range(len(depth_new)):
-#         for j in range(len(depth_new[i])):
-#             ind[i].append(depth[i].index(depth_new[i][j]))
-#     for i in range(len(ind)):
-#         for j in range(len(ind[i])-1):
-#             V[i].append(np.random.permutation(sm[0][i][ind[i][j]:ind[i][j+1]]))
-#             coeff[i].append(np.random.permutation(sm[1][i][ind[i][j]:ind[i][j+1]]))
-#     return [[item for row in V[i] for item in row] for i in range(3)],[[item for row in coeff[i] for item in row] for i in range(3)]
+def perm_ops(t,depth,sm):
+    t_step = t[-1]/depth[-1]
+    ind = [[],[],[]]
+    V = [[],[],[]]
+    coeff = [[],[],[]]
+    depth_new = [[depth[i][0]] for i in range(len(depth))]
+    for i in range(len(depth)):
+        for j in range(len(t)):
+            idx = int(t[j] / t_step)
+            depth_new[i].append(search_depth_with_no_exp(idx,depth[i]))
+    # print(depth_new)
+    for i in range(len(depth_new)):
+        for j in range(len(depth_new[i])):
+            ind[i].append(depth[i].index(depth_new[i][j]))
+    for i in range(len(ind)):
+        for j in range(len(ind[i])-1):
+            V[i].append(np.random.permutation(sm[0][i][ind[i][j]:ind[i][j+1]]))
+            coeff[i].append(np.random.permutation(sm[1][i][ind[i][j]:ind[i][j+1]]))
+    return [[item for row in V[i] for item in row] for i in range(3)],[[item for row in coeff[i] for item in row] for i in range(3)]
 
 def search_U_with_no_exp(idx,depth):
     count = 0
