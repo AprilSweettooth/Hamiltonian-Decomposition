@@ -4,7 +4,7 @@ import numpy as np
 from matplotlib import colors
 from matplotlib.ticker import PercentFormatter
 from collections import Counter
-import pandas as pd
+# import pandas as pd
 
 def cheat_plot(measurements, labels, ylabel, color):
     times = list(measurements.keys())
@@ -134,29 +134,29 @@ def hist(dicts):
     axs[0].legend()
     axs[1].legend()
 
-def sample_hist(sample,labels=['number', 'hopping'],c='green'):
-    sorted_list = sorted(sample)
-    sorted_counted = Counter(sorted_list)
+# def sample_hist(sample,labels=['number', 'hopping'],c='green'):
+#     sorted_list = sorted(sample)
+#     sorted_counted = Counter(sorted_list)
 
-    range_length = list(range(max(sample))) # Get the largest value to get the range.
-    data_series = {}
+#     range_length = list(range(max(sample))) # Get the largest value to get the range.
+#     data_series = {}
 
-    for i in range_length:
-        data_series[i] = 0 # Initialize series so that we have a template and we just have to fill in the values.
+#     for i in range_length:
+#         data_series[i] = 0 # Initialize series so that we have a template and we just have to fill in the values.
 
-    for key, value in sorted_counted.items():
-        data_series[key] = value
+#     for key, value in sorted_counted.items():
+#         data_series[key] = value
 
-    data_series = pd.Series(data_series)
-    x_values = data_series.index
+#     data_series = pd.Series(data_series)
+#     x_values = data_series.index
 
-    # you can customize the limits of the x-axis
-    # plt.xlim(0, max(some_list))
-    plt.bar(x_values, data_series.values, color=c,align='center')
-    plt.title('sample count for each group')
-    plt.ylabel('sample number')
-    plt.xticks(x_values, labels)
-    plt.xticks(rotation=70)
-    plt.legend()
+#     # you can customize the limits of the x-axis
+#     # plt.xlim(0, max(some_list))
+#     plt.bar(x_values, data_series.values, color=c,align='center')
+#     plt.title('sample count for each group')
+#     plt.ylabel('sample number')
+#     plt.xticks(x_values, labels)
+#     plt.xticks(rotation=70)
+#     plt.legend()
 
-    plt.show() 
+#     plt.show() 
