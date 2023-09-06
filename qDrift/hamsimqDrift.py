@@ -112,6 +112,7 @@ class AlgorithmHamSimqDrift:
         abs_weights = [abs(w) for w in weights]
         lambd = sum(abs_weights)
         prob = [weight / lambd for weight in abs_weights]
+        # prob = [weight / (weight*len(abs_weights)) for weight in abs_weights]
         self.p = prob
         op_index = list(range(0,len(weights)))
         # if not abs_coeff:
@@ -359,8 +360,8 @@ class AlgorithmHamSimqDrift:
                         if measurement=='H':
                             self.E.append((statevec.conj().T@self.H)@statevec)
                         elif measurement=='Z':
-                            if abs((statevec.conj().T@self.Z)@statevec - 6)>0.001:
-                                print(n,V[n],coeff[n])
+                            # if abs((statevec.conj().T@self.Z)@statevec - 6)>0.001:
+                                # print(n,V[n],coeff[n])
                             self.E.append((statevec.conj().T@self.Z)@statevec) 
 
         if spectral:
